@@ -19,9 +19,9 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
     // NOTE: Consult particle_filter.h for more information about this method (and others in this file).
     num_particles = 100;
     default_random_engine random_engine;
-    normal_distribution n_x(x, std[0]);
-    normal_distribution n_y(y, std[1]);
-    normal_distribution n_theta(theta, std[2]);
+    normal_distribution<double> n_x(x, std[0]);
+    normal_distribution<double> n_y(y, std[1]);
+    normal_distribution<double> n_theta(theta, std[2]);
     for (int i = 0; i < num_particles; i++) {
         Particle particle;
         particle.id = i;
@@ -53,12 +53,12 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
             new_theta = particle.theta;
         } else {
             new_x = particle.x + velocity / yaw_rate * (sin(particle.theta + yaw_rate * delta_t) - sin(particle.theta));
-            new_y = particle.y + velocity / yaw_rate * (cos(particle.theta) - cos(particle.theta));
+            new_y = particle.y + velocity / yaw_rate * (cos(particle.theta) - cos(particle.theta + yaw_rate * delta_t));
             new_theta = particle.theta + yaw_rate * delta_t;
         }
-        normal_distribution n_x(new_x, std_pos[0]);
-        normal_distribution n_y(new_y, std_pos[1]);
-        normal_distribution n_theta(new_theta, std_pos[2]);
+        normal_distribution<double> n_x(new_x, std_pos[0]);
+        normal_distribution<double> n_y(new_y, std_pos[1]);
+        normal_distribution<double> n_theta(new_theta, std_pos[2]);
 
         particle.x = n_x(random_engine);
         particle.y = n_y(random_engine);
@@ -67,25 +67,36 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 }
 
 void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::vector<LandmarkObs> &observations) {
-    // TODO: Find the predicted measurement that is closest to each observed measurement and assign the
+    // Find the predicted measurement that is closest to each observed measurement and assign the
     //   observed measurement to this particular landmark.
     // NOTE: this method will NOT be called by the grading code. But you will probably find it useful to
     //   implement this method and use it as a helper during the updateWeights phase.
-
+    for (int o = 0; o < observations.size(); o++) {
+        double minimum_distance = numeric_limits<double>::max();
+        LandmarkObs &observation = observations[o];
+        for (int p = 0; p < predicted.size(); p++) {
+            LandmarkObs &prediction = predicted[p];
+            double distance = dist(observation.x, observation.y, prediction.x, prediction.y);
+            if (distance < minimum_distance) {
+                minimum_distance = distance;
+                observation.id = prediction.id;
+            }
+        }
+    }
 }
 
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
                                    std::vector<LandmarkObs> observations, Map map_landmarks) {
-    // TODO: Update the weights of each particle using a mult-variate Gaussian distribution. You can read
+    // Update the weights of each particle using a mult-variate Gaussian distribution. You can read
     //   more about this distribution here: https://en.wikipedia.org/wiki/Multivariate_normal_distribution
     // NOTE: The observations are given in the VEHICLE'S coordinate system. Your particles are located
     //   according to the MAP'S coordinate system. You will need to transform between the two systems.
     //   Keep in mind that this transformation requires both rotation AND translation (but no scaling).
     //   The following is a good resource for the theory:
     //   https://www.willamette.edu/~gorr/classes/GeneralGraphics/Transforms/transforms2d.htm
-    //   and the following is a good resource for the actual equation to implement (look at equation
-    //   3.33
+    //   and the following is a good resource for the actual equation to implement (look at equation 3.33
     //   http://planning.cs.uiuc.edu/node99.html
+
 }
 
 void ParticleFilter::resample() {
@@ -94,8 +105,8 @@ void ParticleFilter::resample() {
     // http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
 
     default_random_engine random_engine;
-    discrete_distribution distribution(weights.begin(), weights.end());
-    vector resample_particles;
+    discrete_distribution<int> distribution(weights.begin(), weights.end());
+    vector<Particle> resample_particles;
     for (int i = 0; i < num_particles; i++) {
         resample_particles.push_back(particles[distribution(random_engine)]);
     }
