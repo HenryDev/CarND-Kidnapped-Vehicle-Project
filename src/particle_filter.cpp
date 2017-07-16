@@ -97,6 +97,65 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     //   and the following is a good resource for the actual equation to implement (look at equation 3.33
     //   http://planning.cs.uiuc.edu/node99.html
 
+    for (int p = 0; p < num_particles; p++) {
+        Particle particle = particles[p];
+        vector<LandmarkObs> landmark_filtered;
+        for (int l = 0; l < map_landmarks.landmark_list.size(); l++) {
+            Map::single_landmark_s landmark = map_landmarks.landmark_list[l];
+            double distance = dist(particle.x, particle.y, landmark.x_f, landmark.y_f);
+            if (distance < sensor_range) {
+                LandmarkObs nearby_landmark;
+                nearby_landmark.id = landmark.id_i;
+                nearby_landmark.x = landmark.x_f;
+                nearby_landmark.y = landmark.y_f;
+                landmark_filtered.push_back(nearby_landmark);
+            }
+        }
+
+        vector<LandmarkObs> transformed_observations;
+        for (int o = 0; o < observations.size(); o++) {
+            LandmarkObs observation = observations[o];
+            LandmarkObs transformed_observation;
+            transformed_observation.x =
+                    observation.x * cos(particle.theta) - observation.y * sin(particle.theta) + particle.x;
+            transformed_observation.y =
+                    observation.x * sin(particle.theta) + observation.y * cos(particle.theta) + particle.y;
+            transformed_observations.push_back(transformed_observation);
+        }
+
+        dataAssociation(landmark_filtered, transformed_observations);
+
+        vector<int> associations;
+        vector<double> sense_x;
+        vector<double> sense_y;
+        for (int j = 0; j < transformed_observations.size(); j++) {
+            LandmarkObs obs = transformed_observations[j];
+            associations.push_back(obs.id);
+            sense_x.push_back(obs.x);
+            sense_y.push_back(obs.y);
+        }
+        particle = SetAssociations(particle, associations, sense_x, sense_y);
+        particles[p] = particle;
+
+        double weight = 1;
+        for (int a = 0; a < particle.associations.size(); a++) {
+            double x = particle.sense_x[a];
+            double y = particle.sense_y[a];
+            double predicted_x = 0;
+            double predicted_y = 0;
+            for (int l = 0; l < landmark_filtered.size(); l++) {
+                if (landmark_filtered[l].id == particle.associations[a]) {
+                    predicted_x = landmark_filtered[l].x;
+                    predicted_y = landmark_filtered[l].y;
+                    break;
+                }
+            }
+            weight *= exp(-0.5 * (pow(x - predicted_x, 2) / pow(std_landmark[0], 2) +
+                                  pow(y - predicted_y, 2) / pow(std_landmark[1], 2)));
+        }
+        particles[p].weight = weight;
+        weights[p] = weight;
+    }
 }
 
 void ParticleFilter::resample() {
